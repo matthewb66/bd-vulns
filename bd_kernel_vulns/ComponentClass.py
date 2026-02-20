@@ -3,15 +3,17 @@ import re
 # import global_values
 # import logging
 # from thefuzz import fuzz
-from .VulnListClass import VulnList
+from VulnListClass import VulnList
+from ConfigClass import Config
+# from BOMClass import BOM
 
 
 class Component:
-    def __init__(self, name, version):
+    def __init__(self, name, version, data):
         self.name = name
         self.version = version
         self.vulnlist = VulnList()
-        self.data = None
+        self.data = data
 
     # def get_matchtypes(self):
     #     try:
@@ -197,3 +199,30 @@ class Component:
         if self.name == 'Linux Kernel':
             return True
         return False
+
+    def get_href(self, href_string, conf):
+        try:
+            for link in self.data['_meta']['links']:
+                if link['rel'] == href_string:
+                    return link['href']
+        except Exception as e:
+            conf.logger.error(f"Unable to process href links for component {self.name} - {e}")
+        return ''
+
+    def get_copyrights(self, conf: Config, bom):
+        try:
+            # origin_url = self.get_href('origins', conf)
+            #
+            # # copyright_url = origin_url + "/copyrights"
+            # data = conf.get_data(bom.bd, origin_url, "application/vnd.blackducksoftware.component-detail-4+json")
+            # for origin in data['items']:
+            #     fcopyright_url = self.get_href(origin, 'file-copyrights')
+            #     print(fcopyright_url)
+            for origin in self.data['origins']:
+                copyright_url = origin['origin'] + "/copyrights"
+                data = conf.get_data(bom.bd, copyright_url, "application/vnd.blackducksoftware.copyright-4+json")
+                return data['totalCount']
+
+        except Exception as e:
+            conf.logger.error(e)
+        return 0

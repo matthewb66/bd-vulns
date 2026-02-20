@@ -1,8 +1,8 @@
 import aiohttp
 import asyncio
-from .VulnClass import Vuln
+from VulnClass import Vuln
 # import config
-from .KernelSourceClass import KernelSource
+from KernelSourceClass import KernelSource
 # from . import global_values
 
 # logger = config.setup_logger('kernel-vulns')

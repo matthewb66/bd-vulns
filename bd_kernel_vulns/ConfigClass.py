@@ -29,9 +29,9 @@ class Config:
         parser.add_argument("-v", "--version", help="Black Duck project version to process (REQUIRED)", default="")
         parser.add_argument("--debug", help="Debug logging mode", action='store_true')
         parser.add_argument("--logfile", help="Logging output file", default="")
-        parser.add_argument("-k", "--kernel_source_file", help="Kernel source files list (REQUIRED)", default="")
-        parser.add_argument("--folders", help="Kernel Source file only contains folders to be used to map vulns",
-                            action='store_true')
+        # parser.add_argument("-k", "--kernel_source_file", help="Kernel source files list (REQUIRED)", default="")
+        # parser.add_argument("--folders", help="Kernel Source file only contains folders to be used to map vulns",
+        #                     action='store_true')
         
         args = parser.parse_args()
 
@@ -79,18 +79,18 @@ class Config:
         if trustcert == 'true' or args.blackduck_trust_cert:
             self.bd_trustcert = True
     
-        if args.kernel_source_file != '':
-            if not os.path.exists(args.kernel_source_file):
-                self.logger.error(f"Supplied kernel source list file '{args.kernel_source_file}' does not exist")
-                terminate = True
-            else:
-                self.kernel_source_file = args.kernel_source_file
-        else:
-            self.logger.error(f"Kernel source list file required (--kernel_source_list)")
-            terminate = True
-    
-        if args.folders == 'true':
-            self.folders = True
+        # if args.kernel_source_file != '':
+        #     if not os.path.exists(args.kernel_source_file):
+        #         self.logger.error(f"Supplied kernel source list file '{args.kernel_source_file}' does not exist")
+        #         terminate = True
+        #     else:
+        #         self.kernel_source_file = args.kernel_source_file
+        # else:
+        #     self.logger.error(f"Kernel source list file required (--kernel_source_list)")
+        #     terminate = True
+        #
+        # if args.folders == 'true':
+        #     self.folders = True
     
         if terminate:
             return False
@@ -115,3 +115,11 @@ class Config:
                 logger.addHandler(file_handler)
 
         return logger
+
+    @staticmethod
+    def get_data(bd, url, accept_hdr):
+        headers = {
+            'accept': accept_hdr,
+        }
+        res = bd.get_json(url, headers=headers)
+        return res

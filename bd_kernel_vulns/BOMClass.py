@@ -1,7 +1,7 @@
 # import config
-from .ComponentListClass import ComponentList
-# from ComponentClass import Component
-from .VulnListClass import VulnList
+from ComponentListClass import ComponentList
+from ComponentClass import Component
+from VulnListClass import VulnList
 # from . import global_values
 # import logging
 from blackduck import Client
@@ -33,18 +33,19 @@ class BOM:
 
             res = self.bd.list_resources(self.bdver_dict)
             self.projver = res['href']
-            # thishref = f"{self.projver}/components"
-            #
-            # bom_arr = self.get_paginated_data(thishref, "application/vnd.blackducksoftware.bill-of-materials-6+json")
-            #
-            # for comp in bom_arr:
-            #     if 'componentVersion' not in comp:
-            #         continue
-            #     # compver = comp['componentVersion']
-            #
-            #     compclass = Component(comp['componentName'], comp['componentVersionName'], comp)
-            #     self.complist.add(compclass)
-            #
+            thishref = f"{self.projver}/components"
+
+            bom_arr = self.get_paginated_data(thishref, "application/vnd.blackducksoftware.bill-of-materials-6+json")
+
+            for comp in bom_arr:
+                if 'componentVersion' not in comp:
+                    continue
+                # compver = comp['componentVersion']
+
+                compclass = Component(comp['componentName'], comp['componentVersionName'], comp)
+                self.complist.add(compclass)
+
+            conf.logger.info("Done")
         except ValueError as v:
             conf.logger.error(v)
             sys.exit(-1)
@@ -105,6 +106,9 @@ class BOM:
         vuln_url = f"{self.projver}/vulnerable-bom-components"
         vuln_arr = self.get_paginated_data(vuln_url, "application/vnd.blackducksoftware.bill-of-materials-8+json")
         self.vulnlist.add_comp_data(vuln_arr, conf)
+
+    def get_copyrights(self, conf):
+        self.complist.get_copyrights(conf, self)
 
     def process_data_async(self, conf):
         if platform.system() == "Windows":
