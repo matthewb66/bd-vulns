@@ -18,7 +18,7 @@ class Config:
         self.debug = False
 
     def get_cli_args(self):
-        parser = argparse.ArgumentParser(description='Black Duck vulns', prog='bd_vulns')
+        parser = argparse.ArgumentParser(description='Black Duck copyrights', prog='bd_copyrights')
 
         # parser.add_argument("projfolder", nargs="?", help="Yocto project folder to analyse", default=".")
 
@@ -43,7 +43,7 @@ class Config:
         # global_values.logging_level = loglevel
         self.logfile = args.logfile
     
-        self.logger = self.setup_logger('kernel-vulns', loglevel)
+        self.logger = self.setup_logger('bd-copyrights', loglevel)
     
         self.logger.debug("ARGUMENTS:")
         for arg in vars(args):

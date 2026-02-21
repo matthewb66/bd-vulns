@@ -45,7 +45,6 @@ class BOM:
                 compclass = Component(comp['componentName'], comp['componentVersionName'], comp)
                 self.complist.add(compclass)
 
-            conf.logger.info("Done")
         except ValueError as v:
             conf.logger.error(v)
             sys.exit(-1)
@@ -108,13 +107,34 @@ class BOM:
         self.vulnlist.add_comp_data(vuln_arr, conf)
 
     def get_copyrights(self, conf):
-        self.complist.get_copyrights(conf, self)
+        print(self.complist.async_get_copyright_counts(conf, self.bd))
 
     def process_data_async(self, conf):
         if platform.system() == "Windows":
             asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
         self.vulnlist.add_vuln_data(asyncio.run(self.vulnlist.async_get_vuln_data(self.bd, conf)), conf)
+
+    def process_copyrights_async(self, conf):
+        if platform.system() == "Windows":
+            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+        # Phase 1: get copyright counts for all components
+        copyright_count_data = asyncio.run(self.complist.async_get_copyright_counts(conf, self.bd))
+
+        zero_count_ids = {comp_id for comp_id, count in copyright_count_data.items() if count == 0}
+        conf.logger.info(f"Found {len(zero_count_ids)} components with 0 copyrights; fetching copyrights from other origins ...")
+
+        # Phase 2: fetch actual copyright text for zero-count components via origins
+        file_copyright_data = {}
+        if zero_count_ids:
+            file_copyright_data = asyncio.run(
+                self.complist.async_get_file_copyrights(conf, self.bd, zero_count_ids)
+            )
+
+        return file_copyright_data
+
+
 
     def ignore_vulns_async(self):
         if platform.system() == "Windows":

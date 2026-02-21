@@ -14,6 +14,7 @@ class Component:
         self.version = version
         self.vulnlist = VulnList()
         self.data = data
+        self.id = self.get_compid()
 
     # def get_matchtypes(self):
     #     try:
@@ -152,8 +153,9 @@ class Component:
 
     def get_compid(self):
         try:
-            compurl = self.data['component']
-            return compurl.split('/')[-1]
+            compurl = self.data['componentVersion']
+            # return compurl.split('/')[-1]
+            return compurl
         except KeyError:
             return ''
 
@@ -218,11 +220,83 @@ class Component:
             # for origin in data['items']:
             #     fcopyright_url = self.get_href(origin, 'file-copyrights')
             #     print(fcopyright_url)
+            count_copyrights = 0
             for origin in self.data['origins']:
                 copyright_url = origin['origin'] + "/copyrights"
                 data = conf.get_data(bom.bd, copyright_url, "application/vnd.blackducksoftware.copyright-4+json")
-                return data['totalCount']
+                count_copyrights += data['totalCount']
+            return count_copyrights
 
         except Exception as e:
             conf.logger.error(e)
         return 0
+
+    async def async_get_copyright_count(self, bd, conf, session, token):
+        if conf.bd_trustcert:
+            ssl = False
+        else:
+            ssl = None
+
+        headers = {
+            'Accept': "application/vnd.blackducksoftware.copyright-4+json",
+            'Authorization': f'Bearer {token}',
+        }
+
+        comp_id = self.id
+        try:
+            count = 0
+            for origin in self.data['origins']:
+                copyright_url = origin['origin'] + "/copyrights"
+                async with session.get(copyright_url, headers=headers, ssl=ssl) as resp:
+                    data = await resp.json()
+                count += data.get('totalCount', 0)
+            return comp_id, count
+        except Exception as e:
+            conf.logger.error(e)
+
+        return comp_id, 0
+
+    async def async_get_file_copyrights(self, bd, conf, session, token):
+        if conf.bd_trustcert:
+            ssl = False
+        else:
+            ssl = None
+
+        headers_origins = {
+            'Accept': "application/vnd.blackducksoftware.component-detail-4+json",
+            'Authorization': f'Bearer {token}',
+        }
+        headers_copyrights = {
+            'Accept': "application/vnd.blackducksoftware.copyright-4+json",
+            'Authorization': f'Bearer {token}',
+        }
+
+        all_copyrights = []
+        try:
+            for selected_origin in self.data.get('origins', []):
+                # Strip last path segment (origin ID) to get component version origins list, fetch first 20
+                origin_url = selected_origin['origin'].rstrip('/')
+                origins_list_url = origin_url.rsplit('/', 1)[0] + '?limit=100'
+
+                async with session.get(origins_list_url, headers=headers_origins, ssl=ssl) as resp:
+                    origins_data = await resp.json()
+
+                for origin_item in origins_data.get('items', []):
+                    origin_item_href = origin_item.get('_meta', {}).get('href', '')
+                    if not origin_item_href:
+                        continue
+                    copyright_url = origin_item_href.rstrip('/') + '/copyrights'
+
+                    async with session.get(copyright_url, headers=headers_copyrights, ssl=ssl) as resp:
+                        copyright_data = await resp.json()
+
+                    for item in copyright_data.get('items', []):
+                        copyright_text = item.get('updatedCopyright', item.get('originalCopyright', ''))
+                        if copyright_text and copyright_text not in all_copyrights:
+                            all_copyrights.append(copyright_text)
+
+        except Exception as e:
+            conf.logger.error(f"Error fetching file copyrights for {self.name}/{self.version}: {e}")
+
+        return self.id, all_copyrights
+

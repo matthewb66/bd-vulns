@@ -41,7 +41,17 @@ def process(conf):
     #                   f"'{conf.kernel_source_file}'")
 
     bom = BOM(conf)
-    bom.get_copyrights(conf)
+    file_copyrights = bom.process_copyrights_async(conf)
+    count_no_copyrights = 0
+    for comp_id, copyrights in file_copyrights.items():
+        print(f"{comp_id}: {len(copyrights)} copyrights from other origins found")
+        if len(copyrights) == 0:
+            count_no_copyrights += 1
+        for c in copyrights:
+            print(f"  {c}")
+
+    print(f"{count_no_copyrights} components with no copyrights found")
+
     # if bom.check_kernel_comp():
     #     conf.logger.warn("Linux Kernel not found in project - terminating")
     #     sys.exit(-1)
