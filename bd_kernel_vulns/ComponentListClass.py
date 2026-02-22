@@ -35,6 +35,12 @@ class ComponentList:
 
         return False
 
+    def get_name_version(self, comp_id):
+        for comp in self.components:
+            if comp.id == comp_id:
+                return comp.name, comp.version
+        return None, None
+
     def get_copyrights(self, conf: Config, bom):
         for comp in self.components:
             if comp.is_ignored():
@@ -59,7 +65,28 @@ class ComponentList:
 
         return copyright_data
 
-    async def async_get_file_copyrights(self, conf: Config, bd, zero_count_ids):
+    # async def async_get_file_level_copyrights(self, conf: Config, bd, zero_count_ids):
+    #     token = bd.session.auth.bearer_token
+    #
+    #     async with aiohttp.ClientSession(trust_env=True) as session:
+    #         tasks = []
+    #         for comp in self.components:
+    #             if comp.is_ignored() or comp.id not in zero_count_ids:
+    #                 continue
+    #             task = asyncio.ensure_future(
+    #                 comp.async_get_file_level_copyrights(bd, conf, session, token)
+    #             )
+    #             tasks.append(task)
+    #
+    #         if not tasks:
+    #             return {}
+    #
+    #         result = dict(await asyncio.gather(*tasks))
+    #         await asyncio.sleep(0.250)
+    #
+    #     return result
+
+    async def async_get_copyrights(self, conf: Config, bd, zero_count_ids):
         token = bd.session.auth.bearer_token
 
         async with aiohttp.ClientSession(trust_env=True) as session:
@@ -68,7 +95,7 @@ class ComponentList:
                 if comp.is_ignored() or comp.id not in zero_count_ids:
                     continue
                 task = asyncio.ensure_future(
-                    comp.async_get_file_copyrights(bd, conf, session, token)
+                    comp.async_get_copyrights(bd, conf, session, token)
                 )
                 tasks.append(task)
 
@@ -80,3 +107,4 @@ class ComponentList:
             conf.logger.info('-')
 
         return result
+

@@ -36,21 +36,24 @@ def main():
 #
 
 def process(conf):
-    # kfiles = KernelSource(conf)
-    # conf.logger.debug(f"Read {kfiles.count()} source entries from kernel source file "
-    #                   f"'{conf.kernel_source_file}'")
-
     bom = BOM(conf)
-    file_copyrights = bom.process_copyrights_async(conf)
+    conf.logger.info(f"Processing copyrights for project '{conf.bd_project}' / '{conf.bd_version}' ...")
+    copyrights_dict = bom.process_copyrights_async(conf)
+
     count_no_copyrights = 0
-    for comp_id, copyrights in file_copyrights.items():
-        print(f"{comp_id}: {len(copyrights)} copyrights from other origins found")
+    for comp_id, copyrights in copyrights_dict.items():
+        name, version = bom.get_comp_name_version(comp_id)
+        label = f"{name} {version}" if name else comp_id
+        conf.logger.info(f"  {label}: {len(copyrights)} copyright(s) found from other origins")
         if len(copyrights) == 0:
             count_no_copyrights += 1
         for c in copyrights:
-            print(f"  {c}")
+            conf.logger.debug(f"    {c}")
 
-    print(f"{count_no_copyrights} components with no copyrights found")
+    conf.logger.info(
+        f"Summary: {len(copyrights_dict)} component(s) processed; "
+        f"{count_no_copyrights} with no copyrights found"
+    )
 
     # if bom.check_kernel_comp():
     #     conf.logger.warn("Linux Kernel not found in project - terminating")

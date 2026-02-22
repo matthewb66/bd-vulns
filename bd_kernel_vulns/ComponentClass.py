@@ -154,8 +154,8 @@ class Component:
     def get_compid(self):
         try:
             compurl = self.data['componentVersion']
-            # return compurl.split('/')[-1]
-            return compurl
+            return compurl.split('/components/')[-1]
+            # return compurl
         except KeyError:
             return ''
 
@@ -242,61 +242,172 @@ class Component:
             'Authorization': f'Bearer {token}',
         }
 
-        comp_id = self.id
+        comp_id = self.id.split('/components/')[-1]
         try:
             count = 0
             for origin in self.data['origins']:
                 copyright_url = origin['origin'] + "/copyrights"
                 async with session.get(copyright_url, headers=headers, ssl=ssl) as resp:
                     data = await resp.json()
-                count += data.get('totalCount', 0)
+                for item in data.get("items", []):
+                    if item['active']:
+                        count += 1
+                # count += data.get('totalCount', 0)
             return comp_id, count
         except Exception as e:
             conf.logger.error(e)
 
         return comp_id, 0
 
-    async def async_get_file_copyrights(self, bd, conf, session, token):
-        if conf.bd_trustcert:
-            ssl = False
-        else:
-            ssl = None
-
-        headers_origins = {
-            'Accept': "application/vnd.blackducksoftware.component-detail-4+json",
-            'Authorization': f'Bearer {token}',
+    def _make_headers(self, token):
+        auth = f'Bearer {token}'
+        return {
+            'origins': {
+                'Accept': "application/vnd.blackducksoftware.component-detail-4+json",
+                'Authorization': auth,
+            },
+            'copyrights': {
+                'Accept': "application/vnd.blackducksoftware.copyright-4+json",
+                'Authorization': auth,
+            },
+            'post': {
+                'Accept': "application/vnd.blackducksoftware.copyright-4+json",
+                'Content-Type': "application/vnd.blackducksoftware.copyright-4+json",
+                'Authorization': auth,
+            },
         }
-        headers_copyrights = {
-            'Accept': "application/vnd.blackducksoftware.copyright-4+json",
-            'Authorization': f'Bearer {token}',
-        }
 
+    async def _fetch_copyrights_for_origins(self, session, origins_list_url, headers, ssl, conf):
+        async with session.get(origins_list_url, headers=headers['origins'], ssl=ssl) as resp:
+            origins_data = await resp.json()
+
+        copyrights = []
+        items = origins_data.get('items', [])
+        conf.logger.debug(f"  {self.name}/{self.version}: found {len(items)} origin(s) to scan")
+        for origin_item in items:
+            href = origin_item.get('_meta', {}).get('href', '')
+            if not href:
+                continue
+            copyright_url = href.rstrip('/') + '/copyrights'
+            async with session.get(copyright_url, headers=headers['copyrights'], ssl=ssl) as resp:
+                data = await resp.json()
+            for item in data.get('items', []):
+                text = item.get('updatedCopyright', item.get('originalCopyright', ''))
+                if text and text not in copyrights:
+                    copyrights.append(text)
+        return copyrights
+
+    async def _post_copyrights(self, session, url, copyrights, headers, ssl, conf):
+        posted, failed = 0, 0
+        for text in copyrights:
+            async with session.post(url, json={"copyright": text},
+                                    headers=headers['post'], ssl=ssl) as resp:
+                if resp.status not in (200, 201, 204):
+                    failed += 1
+                    conf.logger.warning(
+                        f"  [{self.name}/{self.version}] Failed to post copyright "
+                        f"(HTTP {resp.status}): {text[:60]}"
+                    )
+                else:
+                    posted += 1
+        conf.logger.info(
+            f"  [{self.name}/{self.version}] Posted {posted} copyright(s) "
+            f"({failed} failed)"
+        )
+
+    async def async_get_copyrights(self, bd, conf, session, token):
+        ssl = False if conf.bd_trustcert else None
+        headers = self._make_headers(token)
         all_copyrights = []
+
         try:
             for selected_origin in self.data.get('origins', []):
-                # Strip last path segment (origin ID) to get component version origins list, fetch first 20
                 origin_url = selected_origin['origin'].rstrip('/')
                 origins_list_url = origin_url.rsplit('/', 1)[0] + '?limit=100'
+                copyrights_url = origin_url + '/copyrights'
 
-                async with session.get(origins_list_url, headers=headers_origins, ssl=ssl) as resp:
-                    origins_data = await resp.json()
+                origin_copyrights = await self._fetch_copyrights_for_origins(
+                    session, origins_list_url, headers, ssl, conf
+                )
 
-                for origin_item in origins_data.get('items', []):
-                    origin_item_href = origin_item.get('_meta', {}).get('href', '')
-                    if not origin_item_href:
-                        continue
-                    copyright_url = origin_item_href.rstrip('/') + '/copyrights'
+                for text in origin_copyrights:
+                    if text not in all_copyrights:
+                        all_copyrights.append(text)
 
-                    async with session.get(copyright_url, headers=headers_copyrights, ssl=ssl) as resp:
-                        copyright_data = await resp.json()
-
-                    for item in copyright_data.get('items', []):
-                        copyright_text = item.get('updatedCopyright', item.get('originalCopyright', ''))
-                        if copyright_text and copyright_text not in all_copyrights:
-                            all_copyrights.append(copyright_text)
+                if origin_copyrights and conf.update_copyrights:
+                    conf.logger.info(
+                        f"[{self.name}/{self.version}] Posting {len(origin_copyrights)} "
+                        f"copyright(s) to Black Duck ..."
+                    )
+                    await self._post_copyrights(
+                        session, copyrights_url, origin_copyrights, headers, ssl, conf
+                    )
+                elif origin_copyrights:
+                    conf.logger.info(
+                        f"[{self.name}/{self.version}] Found {len(origin_copyrights)} "
+                        f"copyright(s) from other origins (--update_copyrights not set; skipping POST)"
+                    )
 
         except Exception as e:
-            conf.logger.error(f"Error fetching file copyrights for {self.name}/{self.version}: {e}")
+            conf.logger.error(
+                f"[{self.name}/{self.version}] Error during copyright processing: {e}"
+            )
 
         return self.id, all_copyrights
+
+    # async def _fetch_file_copyrights_for_origin(self, session, origin_href, headers, ssl, conf):
+    #     url = origin_href.rstrip('/') + '/file-copyrights'
+    #     async with session.get(url, headers=headers['copyrights'], ssl=ssl) as resp:
+    #         data = await resp.json()
+    #     copyrights = []
+    #     for item in data.get('items', []):
+    #         text = item.get('updatedCopyright', item.get('originalCopyright', ''))
+    #         if text and text not in copyrights:
+    #             copyrights.append(text)
+    #     return copyrights
+    #
+    # async def async_get_file_level_copyrights(self, bd, conf, session, token):
+    #     ssl = False if conf.bd_trustcert else None
+    #     headers = self._make_headers(token)
+    #     all_copyrights = []
+    #
+    #     try:
+    #         for selected_origin in self.data.get('origins', []):
+    #             origin_url = selected_origin['origin'].rstrip('/')
+    #             origins_list_url = origin_url.rsplit('/', 1)[0] + '?limit=100'
+    #
+    #             async with session.get(origins_list_url, headers=headers['origins'], ssl=ssl) as resp:
+    #                 origins_data = await resp.json()
+    #
+    #             items = origins_data.get('items', [])
+    #             conf.logger.debug(
+    #                 f"  [{self.name}/{self.version}] file-copyrights: scanning {len(items)} origin(s)"
+    #             )
+    #             for origin_item in items:
+    #                 href = origin_item.get('_meta', {}).get('href', '')
+    #                 if not href:
+    #                     continue
+    #                 texts = await self._fetch_file_copyrights_for_origin(
+    #                     session, href, headers, ssl, conf
+    #                 )
+    #                 for text in texts:
+    #                     if text not in all_copyrights:
+    #                         all_copyrights.append(text)
+    #
+    #         if all_copyrights:
+    #             conf.logger.info(
+    #                 f"[{self.name}/{self.version}] Found {len(all_copyrights)} file copyright(s)"
+    #             )
+    #         else:
+    #             conf.logger.debug(
+    #                 f"[{self.name}/{self.version}] No file copyrights found"
+    #             )
+    #
+    #     except Exception as e:
+    #         conf.logger.error(
+    #             f"[{self.name}/{self.version}] Error during file-copyright processing: {e}"
+    #         )
+    #
+    #     return self.id, all_copyrights
+
 

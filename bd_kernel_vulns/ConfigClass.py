@@ -16,6 +16,8 @@ class Config:
         self.kernel_source_file = ''
         self.folders = False
         self.debug = False
+        self.update_copyrights = False
+        self.file_copyrights = True
 
     def get_cli_args(self):
         parser = argparse.ArgumentParser(description='Black Duck copyrights', prog='bd_copyrights')
@@ -29,6 +31,16 @@ class Config:
         parser.add_argument("-v", "--version", help="Black Duck project version to process (REQUIRED)", default="")
         parser.add_argument("--debug", help="Debug logging mode", action='store_true')
         parser.add_argument("--logfile", help="Logging output file", default="")
+        parser.add_argument(
+            "--update_copyrights",
+            help="POST collected copyrights back to Black Duck (default: read-only)",
+            action='store_true'
+        )
+        parser.add_argument(
+            "--skip_file_copyrights",
+            help="Do not check the file-copyrights endpoint for components still without copyrights after origin search (default: off)",
+            action='store_true'
+        )
         # parser.add_argument("-k", "--kernel_source_file", help="Kernel source files list (REQUIRED)", default="")
         # parser.add_argument("--folders", help="Kernel Source file only contains folders to be used to map vulns",
         #                     action='store_true')
@@ -78,6 +90,9 @@ class Config:
         trustcert = os.environ.get('BLACKDUCK_TRUST_CERT')
         if trustcert == 'true' or args.blackduck_trust_cert:
             self.bd_trustcert = True
+
+        self.update_copyrights = args.update_copyrights
+        self.file_copyrights = not args.skip_file_copyrights
     
         # if args.kernel_source_file != '':
         #     if not os.path.exists(args.kernel_source_file):

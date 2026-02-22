@@ -2,6 +2,7 @@
 from ComponentListClass import ComponentList
 from ComponentClass import Component
 from VulnListClass import VulnList
+from ConfigClass import Config
 # from . import global_values
 # import logging
 from blackduck import Client
@@ -115,7 +116,109 @@ class BOM:
 
         self.vulnlist.add_vuln_data(asyncio.run(self.vulnlist.async_get_vuln_data(self.bd, conf)), conf)
 
-    def process_copyrights_async(self, conf):
+    def get_source_tree_copyrights(self, conf, zero_count_ids):
+        """Phase 3: Get copyrights from project source trees via file-level string search matches."""
+        source_trees_url = f"{self.projver}/source-trees"
+        internal_headers = {'accept': 'application/vnd.blackducksoftware.internal-1+json'}
+
+        conf.logger.info("Fetching source trees ...")
+        try:
+            res = self.bd.get_json(source_trees_url, headers=internal_headers)
+        except Exception as e:
+            conf.logger.error(f"Error fetching source-trees: {e}")
+            return {}
+
+        items = res.get('items', [])
+        conf.logger.info(f"Source trees: {len(items)} item(s) found")
+
+        # Dict keyed by component version URL -> list of copyright texts
+        copyright_map = {}
+        base_url = conf.bd_url.rstrip('/')
+
+        for item in items:
+            if item.get('nodeType') != 'DIRECTORY':
+                continue
+
+            # Find the source-entries link
+            source_entries_href = None
+            for link in item.get('_meta', {}).get('links', []):
+                if link.get('rel') == 'source-entries':
+                    source_entries_href = link['href']
+                    break
+
+            if not source_entries_href:
+                continue
+
+            # Build base URL for paginated source-entries requests
+            separator = '&' if '?' in source_entries_href else '?'
+            entries_base_url = (
+                f"{source_entries_href}{separator}allDescendants=true"
+                f"&filter=stringSearchMatchType%3Acopyright&limit=100"
+            )
+
+            offset = 0
+            total_count = None
+            total_fetched = 0
+
+            while True:
+                page_url = f"{entries_base_url}&offset={offset}"
+                try:
+                    page_res = self.bd.get_json(page_url)
+                except Exception as e:
+                    conf.logger.error(f"Error fetching source entries at offset {offset}: {e}")
+                    break
+
+                if total_count is None:
+                    total_count = page_res.get('totalCount', 0)
+                    conf.logger.info(
+                        f"  Directory '{item.get('name', '')}': "
+                        f"{total_count} source entry/entries with copyright matches"
+                    )
+                    if total_count == 0:
+                        break
+
+                page_items = page_res.get('items', [])
+                if not page_items:
+                    break
+
+                for entry in page_items:
+                    bom_comp = entry.get('fileMatchBomComponent')
+                    if not bom_comp:
+                        continue
+
+                    project_id = bom_comp.get('project', {}).get('id', '')
+                    release_id = bom_comp.get('release', {}).get('id', '')
+                    if not project_id or not release_id:
+                        continue
+
+                    compver = f"{project_id}/versions/{release_id}"
+
+                    if compver not in zero_count_ids:
+                        continue
+
+                    # comp_ver_url = f"{base_url}/api/components/{compver}"
+
+                    for match in entry.get('fileStringSearchMatches', []):
+                        if match.get('matchType') == 'Copyright':
+                            text = match.get('name', '')
+                            if text:
+                                if compver not in copyright_map:
+                                    copyright_map[compver] = []
+                                if text not in copyright_map[compver]:
+                                    copyright_map[compver].append(text)
+
+                total_fetched += len(page_items)
+                offset += len(page_items)
+
+                if total_fetched >= total_count:
+                    break
+
+        conf.logger.info(
+            f"Source tree phase: found copyrights for {len(copyright_map)} component(s)"
+        )
+        return copyright_map
+
+    def process_copyrights_async(self, conf: Config):
         if platform.system() == "Windows":
             asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
@@ -126,14 +229,25 @@ class BOM:
         conf.logger.info(f"Found {len(zero_count_ids)} components with 0 copyrights; fetching copyrights from other origins ...")
 
         # Phase 2: fetch actual copyright text for zero-count components via origins
-        file_copyright_data = {}
+        copyright_data = {}
         if zero_count_ids:
-            file_copyright_data = asyncio.run(
-                self.complist.async_get_file_copyrights(conf, self.bd, zero_count_ids)
+            copyright_data = asyncio.run(
+                self.complist.async_get_copyrights(conf, self.bd, zero_count_ids)
             )
 
-        return file_copyright_data
+        # Phase 3: get copyrights from project source trees via file-level string search matches
+        if conf.file_copyrights:
+            conf.logger.info("Fetching copyrights from source trees ...")
+            source_tree_copyrights = self.get_source_tree_copyrights(conf, zero_count_ids)
 
+            for comp_ver_url, texts in source_tree_copyrights.items():
+                if comp_ver_url not in copyright_data:
+                    copyright_data[comp_ver_url] = []
+                for text in texts:
+                    if text not in copyright_data[comp_ver_url]:
+                        copyright_data[comp_ver_url].append(text)
+
+        return copyright_data
 
 
     def ignore_vulns_async(self):
@@ -160,6 +274,9 @@ class BOM:
 
     def count_not_in_kernel_vulns(self):
         return self.vulnlist.count() - self.vulnlist.count_in_kernel()
+
+    def get_comp_name_version(self, comp_id):
+        return self.complist.get_name_version(comp_id)
 
     def check_kernel_comp(self):
         return self.complist.check_kernel()
