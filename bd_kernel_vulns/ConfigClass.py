@@ -17,7 +17,8 @@ class Config:
         self.folders = False
         self.debug = False
         self.update_copyrights = False
-        self.file_copyrights = True
+        self.local_copyrights = True
+        self.report = False
 
     def get_cli_args(self):
         parser = argparse.ArgumentParser(description='Black Duck copyrights', prog='bd_copyrights')
@@ -37,8 +38,13 @@ class Config:
             action='store_true'
         )
         parser.add_argument(
-            "--skip_file_copyrights",
-            help="Do not check the file-copyrights endpoint for components still without copyrights after origin search (default: off)",
+            "--skip_local_copyrights",
+            help="Do not check the local search results for components still without copyrights after origin search (default: off)",
+            action='store_true'
+        )
+        parser.add_argument(
+            "--report",
+            help="List all found copyrights per component, showing Phase 2 (origin scan) and Phase 3 (source tree) results separately",
             action='store_true'
         )
         # parser.add_argument("-k", "--kernel_source_file", help="Kernel source files list (REQUIRED)", default="")
@@ -92,7 +98,8 @@ class Config:
             self.bd_trustcert = True
 
         self.update_copyrights = args.update_copyrights
-        self.file_copyrights = not args.skip_file_copyrights
+        self.local_copyrights = not args.skip_local_copyrights
+        self.report = args.report
     
         # if args.kernel_source_file != '':
         #     if not os.path.exists(args.kernel_source_file):

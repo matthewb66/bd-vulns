@@ -246,7 +246,8 @@ class Component:
         try:
             count = 0
             for origin in self.data['origins']:
-                copyright_url = origin['origin'] + "/copyrights"
+                copyright_url = origin['origin'] + ("/copyrights")
+                copyright_url += "?filter=active%3Atrue&filter=copyrightSource%3Akb&limit=100&offset=0"
                 async with session.get(copyright_url, headers=headers, ssl=ssl) as resp:
                     data = await resp.json()
                 for item in data.get("items", []):
@@ -297,24 +298,6 @@ class Component:
                     copyrights.append(text)
         return copyrights
 
-    async def _post_copyrights(self, session, url, copyrights, headers, ssl, conf):
-        posted, failed = 0, 0
-        for text in copyrights:
-            async with session.post(url, json={"copyright": text},
-                                    headers=headers['post'], ssl=ssl) as resp:
-                if resp.status not in (200, 201, 204):
-                    failed += 1
-                    conf.logger.warning(
-                        f"  [{self.name}/{self.version}] Failed to post copyright "
-                        f"(HTTP {resp.status}): {text[:60]}"
-                    )
-                else:
-                    posted += 1
-        conf.logger.info(
-            f"  [{self.name}/{self.version}] Posted {posted} copyright(s) "
-            f"({failed} failed)"
-        )
-
     async def async_get_copyrights(self, bd, conf, session, token):
         ssl = False if conf.bd_trustcert else None
         headers = self._make_headers(token)
@@ -324,7 +307,6 @@ class Component:
             for selected_origin in self.data.get('origins', []):
                 origin_url = selected_origin['origin'].rstrip('/')
                 origins_list_url = origin_url.rsplit('/', 1)[0] + '?limit=100'
-                copyrights_url = origin_url + '/copyrights'
 
                 origin_copyrights = await self._fetch_copyrights_for_origins(
                     session, origins_list_url, headers, ssl, conf
@@ -333,20 +315,6 @@ class Component:
                 for text in origin_copyrights:
                     if text not in all_copyrights:
                         all_copyrights.append(text)
-
-                if origin_copyrights and conf.update_copyrights:
-                    conf.logger.info(
-                        f"[{self.name}/{self.version}] Posting {len(origin_copyrights)} "
-                        f"copyright(s) to Black Duck ..."
-                    )
-                    await self._post_copyrights(
-                        session, copyrights_url, origin_copyrights, headers, ssl, conf
-                    )
-                elif origin_copyrights:
-                    conf.logger.info(
-                        f"[{self.name}/{self.version}] Found {len(origin_copyrights)} "
-                        f"copyright(s) from other origins (--update_copyrights not set; skipping POST)"
-                    )
 
         except Exception as e:
             conf.logger.error(

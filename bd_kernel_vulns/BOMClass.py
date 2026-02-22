@@ -26,8 +26,6 @@ class BOM:
                 timeout=60
             )
 
-            conf.logger.info(f"Working on project '{conf.bd_project}' version '{conf.bd_version}'")
-
             self.bdver_dict = self.get_project(conf)
             if not self.bd:
                 raise ValueError("Unable to create BOM object")
@@ -121,7 +119,6 @@ class BOM:
         source_trees_url = f"{self.projver}/source-trees"
         internal_headers = {'accept': 'application/vnd.blackducksoftware.internal-1+json'}
 
-        conf.logger.info("Fetching source trees ...")
         try:
             res = self.bd.get_json(source_trees_url, headers=internal_headers)
         except Exception as e:
@@ -129,7 +126,7 @@ class BOM:
             return {}
 
         items = res.get('items', [])
-        conf.logger.info(f"Source trees: {len(items)} item(s) found")
+        conf.logger.debug(f"Source trees: {len(items)} item(s) found")
 
         # Dict keyed by component version URL -> list of copyright texts
         copyright_map = {}
@@ -138,6 +135,8 @@ class BOM:
         for item in items:
             if item.get('nodeType') != 'DIRECTORY':
                 continue
+
+            conf.logger.debug("- Located SIGNATURE scan ..")
 
             # Find the source-entries link
             source_entries_href = None
@@ -148,6 +147,8 @@ class BOM:
 
             if not source_entries_href:
                 continue
+
+            conf.logger.debug("- Found source-entries scan ...")
 
             # Build base URL for paginated source-entries requests
             separator = '&' if '?' in source_entries_href else '?'
@@ -213,9 +214,9 @@ class BOM:
                 if total_fetched >= total_count:
                     break
 
-        conf.logger.info(
-            f"Source tree phase: found copyrights for {len(copyright_map)} component(s)"
-        )
+        # conf.logger.info(
+        #     f"Local Copyright Scan: found copyrights for {len(copyright_map)} component(s)"
+        # )
         return copyright_map
 
     def process_copyrights_async(self, conf: Config):
@@ -226,28 +227,37 @@ class BOM:
         copyright_count_data = asyncio.run(self.complist.async_get_copyright_counts(conf, self.bd))
 
         zero_count_ids = {comp_id for comp_id, count in copyright_count_data.items() if count == 0}
-        conf.logger.info(f"Found {len(zero_count_ids)} components with 0 copyrights; fetching copyrights from other origins ...")
-
+        conf.logger.info(f"  {len(zero_count_ids)} components with no copyrights")
+        conf.logger.info("")
+        conf.logger.info(f"Processing copyrights in alternate origins for {len(zero_count_ids)} components...")
         # Phase 2: fetch actual copyright text for zero-count components via origins
-        copyright_data = {}
+        phase2_data = {}
         if zero_count_ids:
-            copyright_data = asyncio.run(
+            phase2_data = asyncio.run(
                 self.complist.async_get_copyrights(conf, self.bd, zero_count_ids)
             )
 
+        phase2_zero_count_ids = {comp_id for comp_id, copyrights in phase2_data.items() if len(copyrights) == 0}
+
+        conf.logger.info(f"  Located copyrights in alternate origins for {len(zero_count_ids) - len(phase2_zero_count_ids)} components")
+
+        if conf.update_copyrights and phase2_data:
+            conf.logger.debug("- Posting Phase 2 copyrights to Black Duck ...")
+            asyncio.run(self.complist.async_post_copyrights(conf, self.bd, phase2_data))
+
         # Phase 3: get copyrights from project source trees via file-level string search matches
-        if conf.file_copyrights:
-            conf.logger.info("Fetching copyrights from source trees ...")
-            source_tree_copyrights = self.get_source_tree_copyrights(conf, zero_count_ids)
+        phase3_data = {}
+        if conf.local_copyrights:
+            conf.logger.info("")
+            conf.logger.info(f""
+                             f"Processing copyrights in Signature local copyright scans for {len(phase2_zero_count_ids)} components...")
+            phase3_data = self.get_source_tree_copyrights(conf, phase2_zero_count_ids)
 
-            for comp_ver_url, texts in source_tree_copyrights.items():
-                if comp_ver_url not in copyright_data:
-                    copyright_data[comp_ver_url] = []
-                for text in texts:
-                    if text not in copyright_data[comp_ver_url]:
-                        copyright_data[comp_ver_url].append(text)
+            phase3_count_ids = {comp_id for comp_id, copyrights in phase3_data.items() if len(copyrights) > 0}
+            conf.logger.info(f"  Found copyrights in local copyright scans for {len(phase3_count_ids)} components")
+            conf.logger.info("")
 
-        return copyright_data
+        return phase2_data, phase3_data
 
 
     def ignore_vulns_async(self):

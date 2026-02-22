@@ -5,75 +5,60 @@ from KernelSourceClass import KernelSource
 from ConfigClass import Config
 import sys
 
-# logger = config.setup_logger('kernel-vulns')
-
 
 def main():
     conf = Config()
     conf.get_cli_args()
+
+    conf.logger.info(f"BLACK DUCK COPYRIGHT PROCESSOR - v1.0")
+    conf.logger.info(f"")
 
     process(conf)
     # config.check_args(args)
     
     sys.exit(0)
 
-
-# def process_kernel_vulns(blackduck_url, blackduck_api_token, kernel_source_file,
-#                          project, version, logger, blackduck_trust_cert=False, folders=''):
-#     conf = Config()
-#     conf.bd_url = blackduck_url
-#     conf.bd_api = blackduck_api_token
-#     conf.bd_project = project
-#     conf.bd_version = version
-#     conf.logger = logger
-#     conf.bd_trustcert = blackduck_trust_cert
-#     conf.folders = folders
-#     conf.kernel_source_file = kernel_source_file
-#
-#     process(conf)
-#
-#     return
-#
-
 def process(conf):
     bom = BOM(conf)
-    conf.logger.info(f"Processing copyrights for project '{conf.bd_project}' / '{conf.bd_version}' ...")
-    copyrights_dict = bom.process_copyrights_async(conf)
+    conf.logger.info(f"Working on project '{conf.bd_project}' version '{conf.bd_version}'")
+    conf.logger.info(f"  {bom.complist.count() - bom.complist.count_ignored()} active components")
+
+    phase2_data, phase3_data = bom.process_copyrights_async(conf)
+
+    all_comp_ids = set(phase2_data.keys()) | set(phase3_data.keys())
 
     count_no_copyrights = 0
-    for comp_id, copyrights in copyrights_dict.items():
+    conf.logger.info("SUMMARY")
+    for comp_id in all_comp_ids:
+        p2 = phase2_data.get(comp_id, [])
+        p3 = phase3_data.get(comp_id, [])
+        all_texts = list(dict.fromkeys(p2 + p3))  # deduplicated, order preserved
+
         name, version = bom.get_comp_name_version(comp_id)
         label = f"{name} {version}" if name else comp_id
-        conf.logger.info(f"  {label}: {len(copyrights)} copyright(s) found from other origins")
-        if len(copyrights) == 0:
-            count_no_copyrights += 1
-        for c in copyrights:
-            conf.logger.debug(f"    {c}")
 
+        if len(all_texts) == 0:
+            count_no_copyrights += 1
+
+        if conf.report:
+            conf.logger.info(f"  {label}:")
+            if p2:
+                conf.logger.info(f".   Alternate Origin Copyrights:")
+                for c in p2:
+                    conf.logger.info(f"      {c}")
+            if p3:
+                conf.logger.info(f".   Local Copyright Search:")
+                for c in p3:
+                    conf.logger.info(f"      {c}")
+        else:
+            conf.logger.info(f"  {label}: {len(all_texts)} Alternate Copyright(s) Identified")
+
+    conf.logger.info(f"")
     conf.logger.info(
-        f"Summary: {len(copyrights_dict)} component(s) processed; "
-        f"{count_no_copyrights} with no copyrights found"
+        f"Total: {len(all_comp_ids)} component(s) processed; "
+        f"{count_no_copyrights} with no copyrights from any location"
     )
 
-    # if bom.check_kernel_comp():
-    #     conf.logger.warn("Linux Kernel not found in project - terminating")
-    #     sys.exit(-1)
-
-    # bom.get_vulns(conf)
-    # conf.logger.info(f"Found {bom.count_vulns()} kernel vulnerabilities from project")
-    #
-    # # bom.print_vulns()
-    # conf.logger.info("Get detailed data for vulnerabilities")
-    # bom.process_data_async(conf)
-    #
-    # conf.logger.info("Checking for kernel source file references in vulnerabilities")
-    # bom.process_kernel_vulns(conf, kfiles)
-    #
-    # conf.logger.info(f"Identified {bom.count_in_kernel_vulns()} in-scope kernel vulns "
-    #                  f"({bom.count_not_in_kernel_vulns()} not in-scope)")
-    #
-    # conf.logger.info(f"Ignored {bom.ignore_vulns_async()} vulns")
-    # # bom.ignore_vulns()
     conf.logger.info("Done")
 
 
