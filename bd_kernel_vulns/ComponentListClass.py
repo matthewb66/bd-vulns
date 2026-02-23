@@ -96,30 +96,34 @@ class ComponentList:
         }
 
         async with aiohttp.ClientSession(trust_env=True) as session:
+            comps_updated = 0
+            copyrights_posted = 0
             for comp in self.components:
                 copyrights = copyright_data.get(comp.id, [])
                 if not copyrights:
                     continue
                 for origin in comp.data.get('origins', []):
                     copyrights_url = origin['origin'].rstrip('/') + '/copyrights'
-                    posted, failed = 0, 0
                     for text in copyrights:
                         async with session.post(
                             copyrights_url, json={"copyright": text},
                             headers=headers, ssl=ssl
                         ) as resp:
                             if resp.status not in (200, 201, 204):
-                                failed += 1
+                                # failed += 1
                                 conf.logger.warning(
                                     f"  [{comp.name}/{comp.version}] Failed to post copyright "
                                     f"(HTTP {resp.status}): {text[:60]}"
                                 )
                             else:
-                                posted += 1
+                                copyrights_posted += 1
+                    if copyrights_posted > 0:
+                        comps_updated += 1
                     # conf.logger.info(
                     #     f"  [{comp.name}/{comp.version}] Posted {posted} copyright(s) "
                     #     f"({failed} failed)"
                     # )
+            conf.summary_text.append(f"- {comps_updated} components updated with new copyrights ({copyrights_posted} total copyrights)")
 
     async def async_get_copyrights(self, conf: Config, bd, zero_count_ids):
         token = bd.session.auth.bearer_token

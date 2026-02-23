@@ -247,7 +247,8 @@ class Component:
             count = 0
             for origin in self.data['origins']:
                 copyright_url = origin['origin'] + ("/copyrights")
-                copyright_url += "?filter=active%3Atrue&filter=copyrightSource%3Akb&limit=100&offset=0"
+                # copyright_url += "?filter=active%3Atrue&filter=copyrightSource%3Akb&limit=100&offset=0"
+                copyright_url += "?limit=100&offset=0"
                 async with session.get(copyright_url, headers=headers, ssl=ssl) as resp:
                     data = await resp.json()
                 for item in data.get("items", []):

@@ -19,6 +19,8 @@ class Config:
         self.update_copyrights = False
         self.local_copyrights = True
         self.report = False
+        self.report_text = []
+        self.summary_text = []
 
     def get_cli_args(self):
         parser = argparse.ArgumentParser(description='Black Duck copyrights', prog='bd_copyrights')

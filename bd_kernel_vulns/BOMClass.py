@@ -219,7 +219,7 @@ class BOM:
         # )
         return copyright_map
 
-    def process_copyrights_async(self, conf: Config):
+    def process_copyrights(self, conf: Config):
         if platform.system() == "Windows":
             asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
@@ -228,8 +228,9 @@ class BOM:
 
         zero_count_ids = {comp_id for comp_id, count in copyright_count_data.items() if count == 0}
         conf.logger.info(f"  {len(zero_count_ids)} components with no copyrights")
+        conf.summary_text.append(f"- {len(zero_count_ids)} components originally with no copyrights")
         conf.logger.info("")
-        conf.logger.info(f"Processing copyrights in alternate origins for {len(zero_count_ids)} components...")
+        conf.logger.info(f"Processing {len(zero_count_ids)} components for alternate origins copyrights ...")
         # Phase 2: fetch actual copyright text for zero-count components via origins
         phase2_data = {}
         if zero_count_ids:
@@ -237,27 +238,45 @@ class BOM:
                 self.complist.async_get_copyrights(conf, self.bd, zero_count_ids)
             )
 
-        phase2_zero_count_ids = {comp_id for comp_id, copyrights in phase2_data.items() if len(copyrights) == 0}
+        phase2_compids_with_copyrights = {comp_id for comp_id, copyrights in phase2_data.items() if len(copyrights) > 0}
+        phase2_compids_without_copyrights = {comp_id for comp_id, copyrights in phase2_data.items() if len(copyrights) == 0}
 
-        conf.logger.info(f"  Located copyrights in alternate origins for {len(zero_count_ids) - len(phase2_zero_count_ids)} components")
-
-        if conf.update_copyrights and phase2_data:
-            conf.logger.debug("- Posting Phase 2 copyrights to Black Duck ...")
-            asyncio.run(self.complist.async_post_copyrights(conf, self.bd, phase2_data))
+        conf.logger.info(f"  Found {len(phase2_compids_with_copyrights)} components with copyrights in alternate origins")
+        conf.summary_text.append(f"- {len(phase2_compids_with_copyrights)} components with copyrights in alternate origins")
 
         # Phase 3: get copyrights from project source trees via file-level string search matches
         phase3_data = {}
         if conf.local_copyrights:
             conf.logger.info("")
             conf.logger.info(f""
-                             f"Processing copyrights in Signature local copyright scans for {len(phase2_zero_count_ids)} components...")
-            phase3_data = self.get_source_tree_copyrights(conf, phase2_zero_count_ids)
+                             f"Processing {len(phase2_compids_without_copyrights)} components for local copyright scans ...")
+            phase3_data = self.get_source_tree_copyrights(conf, phase2_compids_without_copyrights)
 
-            phase3_count_ids = {comp_id for comp_id, copyrights in phase3_data.items() if len(copyrights) > 0}
-            conf.logger.info(f"  Found copyrights in local copyright scans for {len(phase3_count_ids)} components")
+            phase3_compids_with_copyrights = {comp_id for comp_id, copyrights in phase3_data.items() if len(copyrights) > 0}
+            phase3_compids_without_copyrights = {comp_id for comp_id, copyrights in phase3_data.items() if len(copyrights) == 0}
+
+            conf.logger.info(f"  Found {len(phase3_compids_with_copyrights)} components with copyrights in local copyright scans")
             conf.logger.info("")
+            conf.summary_text.append(
+                f"- {len(phase3_compids_with_copyrights)} components with local scan copyrights")
+        else:
+            phase3_compids_with_copyrights = {}
+            conf.summary_text.append(f"- skipped processing local scan copyrights")
 
-        return phase2_data, phase3_data
+        if conf.update_copyrights:
+            update_comp_ids = set(phase2_compids_with_copyrights) | set(phase3_compids_with_copyrights)
+            combined_data = {
+                comp_id: list(dict.fromkeys(phase2_data.get(comp_id, []) + phase3_data.get(comp_id, [])))
+                for comp_id in update_comp_ids
+            }
+            if combined_data:
+                conf.logger.info(f"Updating copyrights for {len(update_comp_ids)} components...")
+                asyncio.run(self.complist.async_post_copyrights(conf, self.bd, combined_data))
+        else:
+            update_comp_ids = {}
+            conf.summary_text.append(f"- No copyrights updated (--update_copyrights not specified)")
+
+        return
 
 
     def ignore_vulns_async(self):
