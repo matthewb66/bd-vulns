@@ -42,12 +42,6 @@ asyncio
 Install dependencies:
 
 ```bash
-pip install -r requirements.txt
-```
-
-Or install the package directly:
-
-```bash
 pip install .
 ```
 
@@ -72,13 +66,14 @@ CLI arguments take precedence over environment variables.
 
 ### Optional arguments
 
-| Argument | Description |
-|---|---|
-| `--blackduck_trust_cert` | Disable TLS certificate verification (also set via `BLACKDUCK_TRUST_CERT=true`) |
-| `--update_copyrights` | POST discovered copyrights back to Black Duck (default: read-only/dry run) |
-| `--skip_local_copyrights` | Skip Phase 3 source tree scan |
-| `--logfile FILE` | Write log output to FILE in addition to stdout |
-| `--debug` | Enable debug-level logging |
+| Argument                  | Description                                                                     |
+|---------------------------|---------------------------------------------------------------------------------|
+| `--blackduck_trust_cert`  | Disable TLS certificate verification (also set via `BLACKDUCK_TRUST_CERT=true`) |
+| `--update_copyrights`     | POST discovered copyrights back to Black Duck (default: read-only/dry run)      |
+| `--skip_local_copyrights` | Skip Phase 3 source tree scan                                                   |
+| `--logfile FILE`          | Write log output to FILE in addition to stdout                                  |
+| `--report`                | WList all discovered copyrights                                                 |
+| `--debug`                 | Enable debug-level logging                                                      |
 
 ---
 
