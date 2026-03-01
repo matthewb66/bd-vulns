@@ -1,24 +1,16 @@
-# import config
 from ComponentListClass import ComponentList
 from ComponentClass import Component
-from VulnListClass import VulnList
 from ConfigClass import Config
-# from . import global_values
-# import logging
 from blackduck import Client
 import sys
-# from tabulate import tabulate
-# import aiohttp
 import asyncio
 import platform
-# import re
 
 
 class BOM:
     def __init__(self, conf):
         try:
             self.complist = ComponentList()
-            self.vulnlist = VulnList()
             self.bd = Client(
                 token=conf.bd_api,
                 base_url=conf.bd_url,
@@ -39,7 +31,6 @@ class BOM:
             for comp in bom_arr:
                 if 'componentVersion' not in comp:
                     continue
-                # compver = comp['componentVersion']
 
                 compclass = Component(comp['componentName'], comp['componentVersionName'], comp)
                 self.complist.add(compclass)
@@ -100,20 +91,6 @@ class BOM:
 
         return ver_dict
 
-    def get_vulns(self, conf):
-        vuln_url = f"{self.projver}/vulnerable-bom-components"
-        vuln_arr = self.get_paginated_data(vuln_url, "application/vnd.blackducksoftware.bill-of-materials-8+json")
-        self.vulnlist.add_comp_data(vuln_arr, conf)
-
-    def get_copyrights(self, conf):
-        print(self.complist.async_get_copyright_counts(conf, self.bd))
-
-    def process_data_async(self, conf):
-        if platform.system() == "Windows":
-            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
-        self.vulnlist.add_vuln_data(asyncio.run(self.vulnlist.async_get_vuln_data(self.bd, conf)), conf)
-
     def get_source_tree_copyrights(self, conf, zero_count_ids):
         """Phase 3: Get copyrights from project source trees via file-level string search matches."""
         source_trees_url = f"{self.projver}/source-trees"
@@ -130,7 +107,6 @@ class BOM:
 
         # Dict keyed by component version URL -> list of copyright texts
         copyright_map = {}
-        base_url = conf.bd_url.rstrip('/')
 
         for item in items:
             if item.get('nodeType') != 'DIRECTORY':
@@ -197,8 +173,6 @@ class BOM:
                     if compver not in zero_count_ids:
                         continue
 
-                    # comp_ver_url = f"{base_url}/api/components/{compver}"
-
                     for match in entry.get('fileStringSearchMatches', []):
                         if match.get('matchType') == 'Copyright':
                             text = match.get('name', '')
@@ -214,9 +188,6 @@ class BOM:
                 if total_fetched >= total_count:
                     break
 
-        # conf.logger.info(
-        #     f"Local Copyright Scan: found copyrights for {len(copyright_map)} component(s)"
-        # )
         return copyright_map
 
     def process_copyrights(self, conf: Config):
@@ -253,7 +224,6 @@ class BOM:
             phase3_data = self.get_source_tree_copyrights(conf, phase2_compids_without_copyrights)
 
             phase3_compids_with_copyrights = {comp_id for comp_id, copyrights in phase3_data.items() if len(copyrights) > 0}
-            phase3_compids_without_copyrights = {comp_id for comp_id, copyrights in phase3_data.items() if len(copyrights) == 0}
 
             conf.logger.info(f"  Found {len(phase3_compids_with_copyrights)} components with copyrights in local copyright scans")
             conf.logger.info("")
@@ -273,39 +243,6 @@ class BOM:
                 conf.logger.info(f"Updating copyrights for {len(update_comp_ids)} components...")
                 asyncio.run(self.complist.async_post_copyrights(conf, self.bd, combined_data))
         else:
-            update_comp_ids = {}
             conf.summary_text.append(f"- No copyrights updated (--update_copyrights not specified)")
 
         return
-
-
-    def ignore_vulns_async(self):
-        if platform.system() == "Windows":
-            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
-        data = asyncio.run(self.vulnlist.async_ignore_vulns(self.bd))
-        return len(data)
-
-    def ignore_vulns(self, conf):  # DEBUG
-        self.vulnlist.ignore_vulns(self.bd, conf)
-
-    def process_kernel_vulns(self, conf, kfiles):
-        self.vulnlist.process_kernel_vulns(conf, kfiles)
-
-    # def count_comps(self):
-    #     return len(self.complist)
-
-    def count_vulns(self):
-        return self.vulnlist.count()
-
-    def count_in_kernel_vulns(self):
-        return self.vulnlist.count_in_kernel()
-
-    def count_not_in_kernel_vulns(self):
-        return self.vulnlist.count() - self.vulnlist.count_in_kernel()
-
-    def get_comp_name_version(self, comp_id):
-        return self.complist.get_name_version(comp_id)
-
-    def check_kernel_comp(self):
-        return self.complist.check_kernel()

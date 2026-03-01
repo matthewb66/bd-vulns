@@ -24,30 +24,6 @@ class ComponentList:
                 count += 1
         return count
 
-    def get_vulns(self):
-        for comp in self.components:
-            comp.get_vulns()
-
-    def check_kernel(self):
-        for comp in self.components:
-            if comp.is_kernel():
-                return True
-
-        return False
-
-    def get_name_version(self, comp_id):
-        for comp in self.components:
-            if comp.id == comp_id:
-                return comp.name, comp.version
-        return None, None
-
-    def get_copyrights(self, conf: Config, bom):
-        for comp in self.components:
-            if comp.is_ignored():
-                continue
-            count = comp.get_copyrights(conf, bom)
-            conf.logger.info(f"Component '{comp.name}/{comp.version}': {count} copyrights")
-
     async def async_get_copyright_counts(self, conf :Config, bd):
         token = bd.session.auth.bearer_token
 

@@ -139,11 +139,3 @@ class Config:
                 logger.addHandler(file_handler)
 
         return logger
-
-    @staticmethod
-    def get_data(bd, url, accept_hdr):
-        headers = {
-            'accept': accept_hdr,
-        }
-        res = bd.get_json(url, headers=headers)
-        return res
