@@ -32,7 +32,7 @@ class Component:
             'Authorization': f'Bearer {token}',
         }
 
-        comp_id = self.id.split('/components/')[-1]
+        comp_id = self.id
         try:
             count = 0
             for origin in self.data['origins']:
@@ -58,11 +58,6 @@ class Component:
             },
             'copyrights': {
                 'Accept': "application/vnd.blackducksoftware.copyright-4+json",
-                'Authorization': auth,
-            },
-            'post': {
-                'Accept': "application/vnd.blackducksoftware.copyright-4+json",
-                'Content-Type': "application/vnd.blackducksoftware.copyright-4+json",
                 'Authorization': auth,
             },
         }

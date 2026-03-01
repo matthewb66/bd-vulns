@@ -78,6 +78,7 @@ class ComponentList:
                 copyrights = copyright_data.get(comp.id, [])
                 if not copyrights:
                     continue
+                comp_posted = 0
                 for origin in comp.data.get('origins', []):
                     copyrights_url = origin['origin'].rstrip('/') + '/copyrights'
                     for text in copyrights:
@@ -86,15 +87,15 @@ class ComponentList:
                             headers=headers, ssl=ssl
                         ) as resp:
                             if resp.status not in (200, 201, 204):
-                                # failed += 1
                                 conf.logger.warning(
                                     f"  [{comp.name}/{comp.version}] Failed to post copyright "
                                     f"(HTTP {resp.status}): {text[:60]}"
                                 )
                             else:
                                 copyrights_posted += 1
-                    if copyrights_posted > 0:
-                        comps_updated += 1
+                                comp_posted += 1
+                if comp_posted > 0:
+                    comps_updated += 1
                     # conf.logger.info(
                     #     f"  [{comp.name}/{comp.version}] Posted {posted} copyright(s) "
                     #     f"({failed} failed)"

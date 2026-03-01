@@ -19,8 +19,6 @@ class BOM:
             )
 
             self.bdver_dict = self.get_project(conf)
-            if not self.bd:
-                raise ValueError("Unable to create BOM object")
 
             res = self.bd.list_resources(self.bdver_dict)
             self.projver = res['href']
@@ -82,11 +80,11 @@ class BOM:
                         break
                 break
         else:
-            conf.logger.error(f"Version '{conf.bd_version}' does not exist in project '{conf.bd_project}'")
+            conf.logger.error(f"Project '{conf.bd_project}' does not exist")
             sys.exit(2)
 
         if ver_dict is None:
-            conf.logger.warning(f"Project '{conf.bd_project}' does not exist")
+            conf.logger.error(f"Version '{conf.bd_version}' does not exist in project '{conf.bd_project}'")
             sys.exit(2)
 
         return ver_dict
@@ -230,7 +228,7 @@ class BOM:
             conf.summary_text.append(
                 f"- {len(phase3_compids_with_copyrights)} components with local scan copyrights")
         else:
-            phase3_compids_with_copyrights = {}
+            phase3_compids_with_copyrights = set()
             conf.summary_text.append(f"- skipped processing local scan copyrights")
 
         if conf.update_copyrights:
