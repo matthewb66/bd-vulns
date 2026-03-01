@@ -243,4 +243,26 @@ class BOM:
         else:
             conf.summary_text.append(f"- No copyrights updated (--update_copyrights not specified)")
 
+        if conf.report:
+            all_comp_ids = set(phase2_compids_with_copyrights) | set(phase3_compids_with_copyrights)
+            comp_name_map = {comp.id: (comp.name, comp.version) for comp in self.complist.components}
+
+            for comp_id in sorted(all_comp_ids, key=lambda c: comp_name_map.get(c, (c, ''))):
+                name, version = comp_name_map.get(comp_id, (comp_id, ''))
+                conf.report_text.append(f"{name} {version}")
+
+                p2 = phase2_data.get(comp_id, [])
+                if p2:
+                    conf.report_text.append(f"  Alternate Origins ({len(p2)} found):")
+                    for text in p2:
+                        conf.report_text.append(f"    - {text}")
+
+                p3 = phase3_data.get(comp_id, [])
+                if p3:
+                    conf.report_text.append(f"  Local Source Tree Scan ({len(p3)} found):")
+                    for text in p3:
+                        conf.report_text.append(f"    - {text}")
+
+                conf.report_text.append("")
+
         return

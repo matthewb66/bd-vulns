@@ -30,6 +30,13 @@ def process(conf):
     for oline in conf.summary_text:
         conf.logger.info(f"  {oline}")
 
+    if conf.report and conf.report_text:
+        conf.logger.info("")
+        conf.logger.info("COPYRIGHT REPORT:")
+        conf.logger.info("=" * 60)
+        for line in conf.report_text:
+            conf.logger.info(line)
+
     conf.logger.info("Done")
 
 
